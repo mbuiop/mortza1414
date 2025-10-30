@@ -1,0 +1,298 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          zip \
+          unzip \
+          openjdk-11-jdk \
+          python3-pip \
+          autoconf \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          libtinfo5 \
+          cmake \
+          libffi-dev \
+          libssl-dev \
+          libsdl2-dev \
+          libsdl2-image-dev \
+          libsdl2-mixer-dev \
+          libsdl2-ttf-dev \
+          libgl1-mesa-dev \
+          libgles2-mesa-dev \
+          freeglut3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pygame==2.5.2
+        pip install PyOpenGL==3.1.7
+        pip install PyOpenGL-accelerate==3.1.7
+        pip install numpy==1.24.3
+        pip install buildozer==1.5.0
+        pip install cython==0.29.33
+        pip install kivy==2.2.1
+
+    - name: Create buildozer.spec
+      run: |
+        cat > buildozer.spec << 'EOF'
+[app]
+title = Galactic Cinematic
+package.name = galacticcinematic
+package.domain = com.yourname.galactic
+
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas,ttf
+
+version = 1.0.0
+requirements = python3,pygame,sdl2,sdl2_image,sdl2_mixer,sdl2_ttf,kivy,openssl
+
+[buildozer]
+log_level = 2
+
+[app]
+presplash.filename = %(source.dir)s/presplash.png
+icon.filename = %(source.dir)s/icon.png
+
+android.permissions = INTERNET
+
+android.api = 33
+android.minapi = 21
+android.ndk = 25b
+android.sdk = 28
+android.allow_backup = True
+android.gradle_dependencies = 'com.android.support:appcompat-v7:28.0.0'
+
+[app:source.exclude_patterns]
+license,images,doc/*,.gitignore,.github/*
+
+[app:android.entrypoint]
+main.py
+EOF
+
+    - name: Create Android-compatible main.py
+      run: |
+        cat > main_android.py << 'EOF'
+import pygame
+import random
+import math
+import os
+
+# تنظیمات برای اندروید
+os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
+
+class Star:
+    def __init__(self, width, height):
+        self.x = random.randint(0, width)
+        self.y = random.randint(0, height)
+        self.size = random.randint(1, 3)
+        self.speed = random.uniform(0.5, 2.0)
+        self.width = width
+        self.height = height
+    
+    def update(self):
+        self.x -= self.speed
+        if self.x < 0:
+            self.x = self.width
+            self.y = random.randint(0, self.height)
+    
+    def draw(self, screen):
+        pygame.draw.circle(screen, (255, 255, 255), (int(self.x), int(self.y)), self.size)
+
+class Spaceship:
+    def __init__(self, width, height):
+        self.x = width // 2
+        self.y = height // 2
+        self.speed = 5
+        self.width = width
+        self.height = height
+        self.angle = 0
+    
+    def update(self, keys):
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: 
+            self.x -= self.speed
+            self.angle = 10
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            self.x += self.speed
+            self.angle = -10
+        else:
+            self.angle = 0
+            
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            self.y -= self.speed
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            self.y += self.speed
+        
+        # محدود کردن به صفحه
+        self.x = max(20, min(self.width - 20, self.x))
+        self.y = max(20, min(self.height - 20, self.y))
+    
+    def draw(self, screen):
+        # رسم سفینه با چرخش
+        points = [
+            (self.x, self.y - 25),
+            (self.x - 20, self.y + 15),
+            (self.x + 20, self.y + 15)
+        ]
+        
+        # اعمال چرخش
+        rotated_points = []
+        for point in points:
+            dx = point[0] - self.x
+            dy = point[1] - self.y
+            rotated_x = self.x + dx * math.cos(math.radians(self.angle)) - dy * math.sin(math.radians(self.angle))
+            rotated_y = self.y + dx * math.sin(math.radians(self.angle)) + dy * math.cos(math.radians(self.angle))
+            rotated_points.append((rotated_x, rotated_y))
+        
+        pygame.draw.polygon(screen, (0, 100, 255), rotated_points)
+        
+        # موتور
+        pygame.draw.polygon(screen, (255, 200, 0), [
+            (self.x - 8, self.y + 15),
+            (self.x + 8, self.y + 15),
+            (self.x, self.y + 25)
+        ])
+
+def init_pygame():
+    try:
+        pygame.init()
+        # برای اندروید از حالت fullscreen استفاده می‌کنیم
+        info = pygame.display.Info()
+        width, height = info.current_w, info.current_h
+        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
+        return screen, width, height
+    except:
+        # fallback برای حالت معمولی
+        pygame.init()
+        screen = pygame.display.set_mode((800, 600))
+        return screen, 800, 600
+
+def main():
+    screen, width, height = init_pygame()
+    pygame.display.set_caption("🚀 Galactic Cinematic")
+    
+    stars = [Star(width, height) for _ in range(100)]
+    ship = Spaceship(width, height)
+    font = pygame.font.Font(None, 36)
+    
+    clock = pygame.time.Clock()
+    running = True
+    score = 0
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+            elif event.type == pygame.FINGERDOWN:
+                # کنترل لمسی برای اندروید
+                touch_x = event.x * width
+                touch_y = event.y * height
+                ship.x = touch_x
+                ship.y = touch_y
+        
+        keys = pygame.key.get_pressed()
+        ship.update(keys)
+        
+        # آپدیت ستاره‌ها
+        for star in stars:
+            star.update()
+            # افزایش امتیاز وقتی ستاره از صفحه خارج می‌شود
+            if star.x <= 0:
+                score += 1
+        
+        screen.fill((0, 0, 0))
+        
+        # رسم ستاره‌ها
+        for star in stars:
+            star.draw(screen)
+        
+        # رسم سفینه
+        ship.draw(screen)
+        
+        # نمایش اطلاعات
+        info_text = font.render(f"Galactic Cinematic - Score: {score}", True, (255, 255, 255))
+        controls_text = font.render("Controls: Arrow Keys or Touch", True, (200, 200, 200))
+        
+        screen.blit(info_text, (10, 10))
+        screen.blit(controls_text, (10, height - 40))
+        
+        pygame.display.flip()
+        clock.tick(60)
+    
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
+EOF
+
+    - name: Create presplash image
+      run: |
+        # ایجاد یک تصویر ساده برای presplash
+        convert -size 480x800 gradient:blue-navy -pointsize 36 -fill white -gravity center -annotate +0+0 "Galactic Cinematic" presplash.png || echo "ImageMagick not available, continuing without presplash"
+
+    - name: Create icon
+      run: |
+        # ایجاد آیکون ساده
+        convert -size 512x512 gradient:blue-cyan -pointsize 72 -fill white -gravity center -annotate +0+0 "🚀" icon.png || echo "ImageMagick not available, continuing without icon"
+
+    - name: Initialize Buildozer
+      run: |
+        buildozer init
+        # استفاده از فایل spec سفارشی
+        cp buildozer.spec .buildozer/
+
+    - name: Build APK
+      run: |
+        # ساخت APK (این مرحله ممکن است 20-30 دقیقه طول بکشد)
+        buildozer -v android debug
+        ls -la bin/
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: GalacticCinematic-APK
+        path: bin/*.apk
+        retention-days: 30
+
+    - name: Upload Build Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Build-Logs
+        path: |
+          .buildozer/
+          bin/
+        retention-days: 10
+
+    - name: Show build summary
+      run: |
+        echo "🎉 Build process completed!"
+        echo "📱 APK file should be available in Artifacts"
+        echo "⏰ If build failed, check Build-Logs artifact for details"
