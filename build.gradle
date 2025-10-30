@@ -1,0 +1,82 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.unity3d.player'
+
+android {
+    compileSdkVersion 33
+    buildToolsVersion "33.0.0"
+
+    defaultConfig {
+        applicationId "com.galaxy.advanced.game"
+        minSdkVersion 24
+        targetSdkVersion 33
+        versionCode 1
+        versionName "1.0"
+        
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-unity.txt'
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        doNotStrip '*/arm64-v8a/*.so'
+        doNotStrip '*/armeabi-v7a/*.so'
+    }
+
+    aaptOptions {
+        noCompress = ['.unity3d', '.ress', '.resource', '.obb']
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    
+    // Unity Android Player
+    implementation 'com.unity3d.player:unityplayer:3.0.0'
+    
+    // AndroidX Core
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.10.0'
+    
+    // Advanced Graphics
+    implementation 'com.google.android.filament:filament-android:1.12.0'
+    implementation 'com.google.android.filament:gltfio-android:1.12.0'
+    
+    // Audio Processing
+    implementation 'com.google.oboe:oboe:1.7.0'
+    
+    // Performance Monitoring
+    implementation 'com.google.android.gms:play-services-games:23.1.0'
+    implementation 'com.google.android.gms:play-services-auth:20.5.0'
+    
+    // VR Support (Optional)
+    implementation 'com.google.vr:sdk-base:1.210.0'
+    
+    // Advanced UI Components
+    implementation 'com.google.android.material:material:1.8.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    
+    // Network for Leaderboards
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    
+    // Analytics
+    implementation 'com.google.firebase:firebase-analytics:21.2.2'
+    implementation 'com.google.firebase:firebase-crashlytics:18.3.7'
+}
