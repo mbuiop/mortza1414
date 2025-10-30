@@ -58,9 +58,26 @@ jobs:
         pip install kivy==2.2.1
 
     
-title = Galactic Cinematic
-package.name = galacticcinematic
-package.domain = com.yourname.galactic
+- name: ایجاد فایل buildozer.spec
+  run: |
+    cat <<'EOF' > buildozer.spec
+    [app]
+    title = Galactic Cinematic
+    package.name = galacticcinematic
+    package.domain = com.yourname.galactic
+    source.dir = .
+    source.include_exts = py,png,jpg,kv,atlas,ttf
+    version = 1.0.0
+    requirements = python3,pygame,sdl2,sdl2_image,sdl2_mixer,sdl2_ttf
+
+    [buildozer]
+    log_level = 2
+
+    [app]
+    presplash.filename = %(source.dir)s/presplash.png
+    icon.filename = %(source.dir)s/icon.png
+    EOF
+
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
