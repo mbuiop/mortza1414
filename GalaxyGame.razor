@@ -1,0 +1,252 @@
+@page "/galaxy-game"
+@inherits GalaxyGameBase
+@using Microsoft.AspNetCore.Components.Web
+@using Blazor.Extensions
+@using Blazor.Extensions.Canvas
+@using Blazor.Extensions.Canvas.Model
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<PageTitle>Galaxy Advanced Game - Epic Space Adventure</PageTitle>
+
+<div class="game-container">
+    <!-- Canvas برای رندرینگ پیشرفته -->
+    <BECanvas Width="@windowWidth" Height="@windowHeight" @ref="canvasReference" 
+              class="game-canvas" id="mainCanvas" />
+
+    <!-- UI لایه‌های -->
+    <div class="ui-layer">
+        <!-- HUD بازی -->
+        <div class="game-hud">
+            <div class="hud-item fuel-display">
+                <span class="hud-label">⛽ سوخت</span>
+                <div class="fuel-bar">
+                    <div class="fuel-fill" style="width: @(playerFuel)%; 
+                         background: @GetFuelColor(playerFuel)"></div>
+                </div>
+                <span class="hud-value">@playerFuel%</span>
+            </div>
+
+            <div class="hud-item score-display">
+                <span class="hud-label">🏆 امتیاز</span>
+                <span class="hud-value">@currentScore.ToString("N0")</span>
+            </div>
+
+            <div class="hud-item level-display">
+                <span class="hud-label">🚀 مرحله</span>
+                <span class="hud-value">@currentLevel</span>
+            </div>
+
+            <div class="hud-item bomb-display">
+                <span class="hud-label">💣 بمب</span>
+                <span class="hud-value">@(bombAvailable ? "آماده!" : $"{bombCooldown:F1}s")</span>
+            </div>
+        </div>
+
+        <!-- کنترل‌های لمسی -->
+        <div class="touch-controls">
+            <div class="joystick-area" @ontouchstart="HandleTouchStart" 
+                 @ontouchmove="HandleTouchMove" @ontouchend="HandleTouchEnd">
+                <div class="joystick-base">
+                    <div class="joystick-handle" style="transform: translate(@joystickXpx, @joystickYpx)"></div>
+                </div>
+            </div>
+
+            <button class="bomb-button @(bombAvailable ? "ready" : "cooldown")" 
+                    @onclick="ActivateBomb">
+                💣
+            </button>
+        </div>
+    </div>
+
+    <!-- منوهای بازی -->
+    @if (showMainMenu)
+    {
+        <div class="menu-overlay">
+            <div class="main-menu">
+                <h1 class="game-title">🚀 بازی کهکشانی پیشرفته</h1>
+                
+                <div class="menu-stats">
+                    <div class="stat-item">
+                        <span>بالاترین امتیاز</span>
+                        <span class="stat-value">@highScore.ToString("N0")</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>بالاترین مرحله</span>
+                        <span class="stat-value">@maxLevel</span>
+                    </div>
+                </div>
+
+                <button class="menu-btn start-btn" @onclick="StartGame">
+                    🎮 شروع بازی
+                </button>
+                <button class="menu-btn achievement-btn" @onclick="ShowAchievements">
+                    🏆 مدال‌ها
+                </button>
+                <button class="menu-btn instructions-btn" @onclick="ShowInstructions">
+                    📖 راهنما
+                </button>
+            </div>
+        </div>
+    }
+
+    @if (showLevelComplete)
+    {
+        <div class="menu-overlay">
+            <div class="level-complete-menu">
+                <h2>🎉 تبریک! مرحله @currentLevel تکمیل شد</h2>
+                <div class="completion-stats">
+                    <p>امتیاز کسب شده: <strong>@levelScore.ToString("N0")</strong></p>
+                    <p>سکه‌های جمع‌آوری شده: <strong>@coinsCollected</strong></p>
+                </div>
+                <button class="menu-btn next-level-btn" @onclick="NextLevel">
+                    ⏭️ مرحله بعد
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // رفرنس‌ها
+    private BECanvasComponent canvasReference;
+    private Canvas2DContext canvasContext;
+
+    // ابعاد پنجره
+    private int windowWidth = 800;
+    private int windowHeight = 600;
+
+    // وضعیت بازی
+    private bool gameRunning = false;
+    private bool showMainMenu = true;
+    private bool showLevelComplete = false;
+
+    // اطلاعات بازیکن
+    private double playerX = 400;
+    private double playerY = 300;
+    private double playerFuel = 100;
+    private int currentScore = 0;
+    private int currentLevel = 1;
+    private int coinsCollected = 0;
+
+    // سیستم بمب
+    private bool bombAvailable = true;
+    private double bombCooldown = 0;
+
+    // کنترل لمسی
+    private double joystickXpx = "0px";
+    private double joystickYpx = "0px";
+    private bool isTouching = false;
+
+    // آمار
+    private int highScore = 0;
+    private int maxLevel = 1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeGame();
+        }
+    }
+
+    private async Task InitializeGame()
+    {
+        // بارگذاری کانتکس
+        canvasContext = await canvasReference.CreateCanvas2DAsync();
+        
+        // تنظیم ابعاد
+        windowWidth = (int)(await JSRuntime.InvokeAsync<double>("getWindowWidth"));
+        windowHeight = (int)(await JSRuntime.InvokeAsync<double>("getWindowHeight"));
+        
+        // بارگذاری داده‌ها
+        await LoadGameData();
+        
+        // شروع لوپ بازی
+        _ = GameLoop();
+    }
+
+    private async Task GameLoop()
+    {
+        while (true)
+        {
+            if (gameRunning)
+            {
+                await UpdateGame();
+                await RenderGame();
+            }
+            await Task.Delay(16); // ~60 FPS
+        }
+    }
+
+    private async Task UpdateGame()
+    {
+        // به‌روزرسانی موقعیت بازیکن
+        UpdatePlayerPosition();
+        
+        // به‌روزرسانی سیستم سوخت
+        UpdateFuelSystem();
+        
+        // به‌روزرسانی بمب
+        UpdateBombSystem();
+        
+        // بررسی برخوردها
+        CheckCollisions();
+        
+        // تولید دشمنان
+        SpawnEnemies();
+        
+        // به‌روزرسانی دشمنان
+        UpdateEnemies();
+    }
+
+    private async Task RenderGame()
+    {
+        // پاک کردن کانواس
+        await canvasContext.ClearRectAsync(0, 0, windowWidth, windowHeight);
+        
+        // رسم پس‌زمینه کهکشان
+        await DrawGalaxyBackground();
+        
+        // رسم بازیکن
+        await DrawPlayer();
+        
+        // رسم دشمنان
+        await DrawEnemies();
+        
+        // رسم سکه‌ها
+        await DrawCoins();
+        
+        // رسم افکت‌ها
+        await DrawEffects();
+    }
+
+    private void StartGame()
+    {
+        showMainMenu = false;
+        gameRunning = true;
+        ResetGameState();
+        StateHasChanged();
+    }
+
+    private void ResetGameState()
+    {
+        playerX = windowWidth / 2;
+        playerY = windowHeight / 2;
+        playerFuel = 100;
+        currentScore = 0;
+        currentLevel = 1;
+        coinsCollected = 0;
+        bombAvailable = true;
+        bombCooldown = 0;
+    }
+
+    private string GetFuelColor(double fuel)
+    {
+        return fuel > 50 ? "linear-gradient(45deg, #00ff88, #00ccff)" :
+               fuel > 20 ? "linear-gradient(45deg, #ffaa00, #ff5500)" :
+                           "linear-gradient(45deg, #ff4444, #cc0000)";
+    }
+
+    // سایر متدها...
+}
