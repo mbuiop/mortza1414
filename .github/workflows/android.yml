@@ -57,10 +57,7 @@ jobs:
         pip install cython==0.29.33
         pip install kivy==2.2.1
 
-    - name: Create buildozer.spec
-      run: |
-        cat > buildozer.spec << 'EOF'
-[app]
+    
 title = Galactic Cinematic
 package.name = galacticcinematic
 package.domain = com.yourname.galactic
@@ -94,7 +91,12 @@ license,images,doc/*,.gitignore,.github/*
 main.py
 EOF
 
-    - name: Create Android-compatible main.py
+ - name: ایجاد فایل buildozer.spec
+  run: |
+    cat <<'EOF' > buildozer.spec
+    [برنامه]
+    EOF
+   - name: Create Android-compatible main.py
       run: |
         cat > main_android.py << 'EOF'
 import pygame
